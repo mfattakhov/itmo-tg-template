@@ -225,8 +225,22 @@ bash scripts/deploy.sh up --ssh-cidr $(curl -s -4 ifconfig.me)/32
 | `deploy logs`                          | Показывает последние 100 строк логов бота и PostgreSQL                               |
 | `deploy stop`                          | Останавливает всю ВМ; диск с БД сохраняется и продолжает тарифицироваться            |
 | `deploy start`                         | Запускает ВМ и ждёт готовности контейнеров                                           |
-| `deploy access --ssh-cidr НОВЫЙ_IP/32` | Меняет разрешённый адрес SSH после смены сети; IP подставляется так же, как в `up`   |
+| `deploy access --ssh-cidr …`           | Меняет разрешённый адрес SSH на текущий после смены сети (команды ниже)              |
 | `deploy destroy`                       | Удаляет созданные ресурсы проекта вместе с диском и данными БД; общая сеть `default` остаётся |
+
+После смены сети или VPN обновите разрешённый адрес — текущий IP подставится сам:
+
+**Windows (PowerShell):**
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 access --ssh-cidr "$(Invoke-RestMethod https://api.ipify.org)/32"
+```
+
+**macOS / Linux:**
+
+```bash
+bash scripts/deploy.sh access --ssh-cidr $(curl -s -4 ifconfig.me)/32
+```
 
 Повторный `up` берёт код из вашей текущей папки, включая незакоммиченные изменения Python-файлов в `app`. Он не делает commit/push и не требует публичного репозитория. Если добавите ресурсы приложения другого типа (например, шаблоны или SQL-файлы), дополните явный список упаковки в `source_archive` и `COPY` в Dockerfile.
 
@@ -269,7 +283,7 @@ bash scripts/deploy.sh up --ssh-cidr $(curl -s -4 ifconfig.me)/32
 | Telegram Conflict                 | Остановите другой polling-процесс с тем же токеном                                                                                                                 |
 | Установлен webhook                | Используйте отдельного учебного бота или явно удалите ранее установленный webhook; шаблон его сам не удаляет                                                       |
 | yc отказал в создании             | Проверьте каталог, биллинг, квоты, IAM-права, доступность платформы в зоне                                                                                         |
-| SSH недоступен                    | Проверьте публичный IP/CIDR, VPN и команду `deploy access`; убедитесь, что ВМ работает                                                                             |
+| SSH недоступен                    | Проверьте VPN и обновите адрес командой `deploy access` (раздел 8); убедитесь, что ВМ работает                                                                    |
 | Сбой установки Docker на ВМ       | Откройте ВМ в консоли Yandex Cloud и проверьте cloud-init; при SSH-доступе выполните `sudo cloud-init status --long` и `sudo journalctl -u cloud-final --no-pager` |
 | Ошибка сборки на ВМ               | Проверьте доступ к Docker Hub/PyPI, свободное место и совместимость добавленных зависимостей                                                                       |
 | Ресурс не принадлежит проекту     | Проверьте профиль yc и сохранённый state; не удаляйте чужие ресурсы ради повторного запуска                                                                        |

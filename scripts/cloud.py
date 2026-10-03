@@ -28,6 +28,16 @@ REMOTE = "/home/student/course-bot"
 COMPOSE = f"cd {REMOTE} && docker compose --env-file .env.cloud --profile cloud"
 
 
+def deploy_command(action: str) -> str:
+    """Готовая команда, которая сама подставляет текущий публичный IPv4."""
+    if os.name == "nt":
+        return (
+            "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\deploy.ps1 "
+            f'{action} --ssh-cidr "$(Invoke-RestMethod https://api.ipify.org)/32"'
+        )
+    return f"bash scripts/deploy.sh {action} --ssh-cidr $(curl -s -4 ifconfig.me)/32"
+
+
 def install_yc() -> str:
     found = shutil.which("yc")
     usual = Path.home() / "yandex-cloud" / "bin" / ("yc.exe" if os.name == "nt" else "yc")
@@ -252,7 +262,7 @@ class Cloud:
             )
         cidr = args.ssh_cidr or self.state.get("ssh_cidr")
         if not cidr:
-            raise CommandError("Укажите --ssh-cidr ВАШ_ПУБЛИЧНЫЙ_IP/32 для доступа по SSH.")
+            raise CommandError(f"Укажите адрес для доступа по SSH: {deploy_command('up')}")
         try:
             network = ipaddress.ip_network(cidr, strict=True)
             if network.version != 4 or network.prefixlen == 0:
@@ -260,9 +270,7 @@ class Cloud:
         except ValueError:
             raise CommandError("--ssh-cidr: нужен IPv4/CIDR, например 203.0.113.10/32.") from None
         if self.state.get("ssh_cidr") and cidr != self.state["ssh_cidr"]:
-            raise CommandError(
-                "IP изменился: сначала выполните deploy access --ssh-cidr НОВЫЙ_IP/32."
-            )
+            raise CommandError(f"IP изменился: сначала выполните {deploy_command('access')}")
         self.state.update(config=config, ssh_cidr=cidr)
         self.save()
         key = self.key()
@@ -409,7 +417,10 @@ class Cloud:
             except CommandError:
                 print("Ждём SSH на ВМ…", flush=True)
                 time.sleep(5)
-        raise CommandError("SSH не стал доступен за 10 минут; проверьте --ssh-cidr и сеть.")
+        raise CommandError(
+            f"SSH не стал доступен за 10 минут; проверьте сеть или обновите адрес: "
+            f"{deploy_command('access')}"
+        )
 
     def deploy(self, instance: dict, settings: Settings) -> None:
         self.wait_ssh(instance)
@@ -462,7 +473,9 @@ class Cloud:
             if parsed.version != 4 or parsed.prefixlen == 0:
                 raise ValueError
         except (ValueError, TypeError):
-            raise CommandError("Для access укажите --ssh-cidr ВАШ_ПУБЛИЧНЫЙ_IP/32.") from None
+            raise CommandError(
+                f"Для access укажите IPv4/CIDR: {deploy_command('access')}"
+            ) from None
         group = self.lookup("security-group", KINDS["security-group"])
         if not group:
             raise CommandError("Группа безопасности проекта не найдена.")
